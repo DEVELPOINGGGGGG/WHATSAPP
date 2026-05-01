@@ -23,7 +23,6 @@ let qrCodeImage = null;
 let isReady = false;
 let validApiKey = null;
 let lastQrAt = null;
-let restarting = false;
 
 const isHeadless = process.env.HEADLESS !== 'false';
 const chromeCandidatePaths = [
@@ -51,15 +50,15 @@ if (chromeCandidatePaths.length) puppeteerConfig.executablePath = chromeCandidat
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
-  takeoverOnConflict: true,
-  takeoverTimeoutMs: 10000,
-  qrMaxRetries: 0,
-  puppeteer: puppeteerConfig
+  puppeteer: {
+    headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process']
+  }
 });
 
 client.on('qr', async (qr) => {
-  qrCodeImage = await qrcode.toDataURL(qr, { margin: 2, scale: 8 });
-  lastQrAt = new Date().toISOString();
+  qrCodeImage = await qrcode.toDataURL(qr);
   console.log('>> NEW QR GENERATED');
 });
 
@@ -74,34 +73,7 @@ client.on('disconnected', () => {
   validApiKey = null;
 });
 
-
-
-
-const startClient = async () => {
-  try {
-    await client.initialize();
-  } catch (err) {
-    console.error('>> ENGINE FAILED:', err.message);
-  }
-};
-
-const resetClientSession = async () => {
-  restarting = true;
-  try {
-    isReady = false;
-    qrCodeImage = null;
-    validApiKey = null;
-    await client.destroy();
-  } catch (_e) {}
-  try {
-    const authPath = path.join(__dirname, 'm_tech_auth');
-    require('fs').rmSync(authPath, { recursive: true, force: true });
-  } catch (_e) {}
-  await startClient();
-  restarting = false;
-};
-
-startClient();
+client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
 const renderUI = (title, content, script = '') => `<!DOCTYPE html>
 <html lang="en">
@@ -113,8 +85,7 @@ const renderUI = (title, content, script = '') => `<!DOCTYPE html>
     :root { --bg:#05070e; --card:#0f1320cc; --line:#2b334a; --pri:#25d366; --text:#e8ecf7; --muted:#95a1bc; }
     * { box-sizing:border-box; margin:0; padding:0; font-family: Inter,system-ui,-apple-system,sans-serif; }
     body { min-height:100vh; background:radial-gradient(1200px circle at top right,#1a2744 0%,var(--bg) 45%); color:var(--text); display:grid; place-items:center; padding:20px; }
-    .card { width:min(920px,100%); background:var(--card); border:1px solid var(--line); border-radius:24px; box-shadow:0 20px 70px #0008, 0 0 50px #25d36622; padding:24px; position:relative; overflow:hidden; }
-    .card::after { content:""; position:absolute; inset:auto -40% -60% -40%; height:300px; background:radial-gradient(circle,#25d36622,transparent 60%); pointer-events:none; }
+    .card { width:min(840px,100%); background:var(--card); border:1px solid var(--line); border-radius:24px; box-shadow:0 20px 70px #0008; padding:24px; }
     .head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:18px; }
     .title { font-size:clamp(1.2rem,2.5vw,2rem); font-weight:800; }
     .status { border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:.78rem; color:var(--muted); }
@@ -167,14 +138,12 @@ app.get('/dashboard', (req, res) => {
 
   if (!isReady) {
     return res.send(renderUI('Link Device', `
-      <section class="head"><div class="title">Link your device</div><div class="status off">${restarting ? 'Restarting session...' : 'Waiting for scan'}</div></section>
+      <section class="head"><div class="title">Link your device</div><div class="status off">Waiting for scan</div></section>
       <div class="panel">
         <h3>Step 1: Open WhatsApp on your phone</h3>
-        <p>Go to Linked Devices and scan this QR code. If you run locally with <b>HEADLESS=false</b>, a real browser opens <b>web.whatsapp.com</b> too.</p>
-        ${qrCodeImage ? `<div class="qr"><img src="${qrCodeImage}" alt="WhatsApp QR" /></div>` : '<p>Generating QR code… If still empty, click Reset Session below.</p>'}
-        <form action="/reset-session" method="POST"><button class="ghost" type="submit">Reset WhatsApp Session (Fix QR)</button></form>
-        <a href="https://web.whatsapp.com" target="_blank" rel="noreferrer"><button class="ghost" type="button">Open WhatsApp Web</button></a>
-        <p class="small">QR last updated: ${lastQrAt || 'waiting...'} | Auto-refresh every 5 seconds.</p>
+        <p>Go to Linked Devices and scan this QR code.</p>
+        ${qrCodeImage ? `<div class="qr"><img src="${qrCodeImage}" alt="WhatsApp QR" /></div>` : '<p>Generating QR code…</p>'}
+        <p class="small">This page auto-refreshes every 5 seconds.</p>
       </div>
     `, 'setTimeout(() => location.reload(), 5000);'));
   }
@@ -221,13 +190,6 @@ app.get('/dashboard', (req, res) => {
   `));
 });
 
-
-app.post('/reset-session', async (req, res) => {
-  if (!req.session.isAuth) return res.redirect('/');
-  await resetClientSession();
-  res.redirect('/dashboard');
-});
-
 app.post('/key', (req, res) => {
   if (!req.session.isAuth || !isReady) return res.redirect('/dashboard');
   validApiKey = crypto.randomBytes(24).toString('hex');
@@ -248,7 +210,7 @@ app.post('/api/send', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, linked: isReady, hasApiKey: Boolean(validApiKey), headless: isHeadless, node: process.version, platform: os.platform() });
+  res.json({ ok: true, linked: isReady, hasApiKey: Boolean(validApiKey) });
 });
 
 const PORT = process.env.PORT || 8080;

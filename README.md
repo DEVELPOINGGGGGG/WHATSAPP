@@ -34,18 +34,6 @@ Default admin password: `7992410411` (override with `ADMIN_PASSWORD`).
    - `ADMIN_PASSWORD` = your secure password
    - `SESSION_SECRET` = long random string
    - `PUPPETEER_EXECUTABLE_PATH` = `/usr/bin/chromium-browser`
-   - `HEADLESS` = `true` on Render
-
-
-## QR / Browser mode
-
-- Default: `HEADLESS=true` (best for Render).
-- Local desktop mode: set `HEADLESS=false` to open a visible Chromium window on `web.whatsapp.com` while still showing QR in your panel.
-- If QR gets stuck, use **Reset WhatsApp Session (Fix QR)** in dashboard to force a fresh QR.
-
-## Memory optimization (<512MB target)
-
-This app is configured with low-memory Chromium flags and JS heap cap to stay lightweight in small containers.
 
 ## API
 
