@@ -1,18 +1,13 @@
 {
-  "name": "m-tech-core-engine",
-  "version": "1.0.0",
-  "description": "WhatsApp Cloud Engine",
+  "name": "m-tech-core-v4",
+  "version": "4.0.0",
+  "description": "Ultra-lightweight WhatsApp Engine for Render",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
   "dependencies": {
     "cors": "^2.8.5",
-    "crypto": "^1.0.1",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "fs-extra": "^11.2.0",
-    "qrcode": "^1.5.3",
     "whatsapp-web.js": "^1.23.0"
   }
 }
