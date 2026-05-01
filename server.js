@@ -1,11 +1,11 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const express = require("express");
 const session = require("express-session");
-const qrcode = require("qrcode");
 const crypto = require("crypto");
 const cors = require("cors");
 const pino = require("pino");
 const fs = require("fs");
+const puppeteer = require("puppeteer");
 
 const app = express();
 app.use(express.json());
@@ -24,47 +24,134 @@ let qrCodeImage = null;
 let isReady = false;
 let validApiKey = null;
 
+// ─── Puppeteer: capture QR from web.whatsapp.com ────────────────────────────
+
+async function startWhatsAppWeb() {
+    console.log(">> [Puppeteer] Launching headless browser...");
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-first-run",
+                "--no-zygote",
+                "--single-process",
+                "--disable-extensions"
+            ]
+        });
+
+        const page = await browser.newPage();
+        await page.setUserAgent(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        );
+        await page.setViewport({ width: 1280, height: 800 });
+
+        console.log(">> [Puppeteer] Navigating to web.whatsapp.com...");
+        await page.goto("https://web.whatsapp.com", {
+            waitUntil: "networkidle2",
+            timeout: 60000
+        });
+
+        // Wait up to 30 s for the QR canvas/image to appear
+        console.log(">> [Puppeteer] Waiting for QR code element...");
+        const QR_SELECTOR = 'canvas[aria-label="Scan me!"], div[data-ref] canvas, canvas[role="img"]';
+        try {
+            await page.waitForSelector(QR_SELECTOR, { timeout: 30000 });
+        } catch {
+            // Fallback: try the data-ref attribute container
+            await page.waitForSelector('[data-ref]', { timeout: 10000 });
+        }
+
+        console.log(">> [Puppeteer] QR element found — capturing image...");
+
+        // Render the QR canvas to a data URL
+        qrCodeImage = await page.evaluate((sel) => {
+            // Try canvas first
+            const canvas = document.querySelector(sel);
+            if (canvas && canvas.tagName === 'CANVAS') {
+                return canvas.toDataURL('image/png');
+            }
+            // Fallback: find any canvas inside the QR container
+            const container = document.querySelector('[data-ref]');
+            if (container) {
+                const c = container.querySelector('canvas');
+                if (c) return c.toDataURL('image/png');
+            }
+            return null;
+        }, QR_SELECTOR);
+
+        if (!qrCodeImage) {
+            // Last resort: screenshot the QR region
+            const el = await page.$('[data-ref]') || await page.$(QR_SELECTOR);
+            if (el) {
+                const buf = await el.screenshot({ type: 'png' });
+                qrCodeImage = 'data:image/png;base64,' + buf.toString('base64');
+            }
+        }
+
+        if (qrCodeImage) {
+            console.log(">> [Puppeteer] QR captured successfully.");
+        } else {
+            console.error(">> [Puppeteer] Could not capture QR image.");
+        }
+
+        // Poll for successful login (QR disappears, main app loads)
+        console.log(">> [Puppeteer] Waiting for user to scan QR...");
+        try {
+            await page.waitForSelector('#app .two, [data-testid="chat-list"], #side', {
+                timeout: 120000
+            });
+            console.log(">> [Puppeteer] Login detected — handing off to Baileys...");
+        } catch {
+            console.log(">> [Puppeteer] Login wait timed out — continuing anyway.");
+        }
+
+    } catch (err) {
+        console.error(">> [Puppeteer] Error:", err.message);
+    } finally {
+        if (browser) {
+            await browser.close().catch(() => {});
+            console.log(">> [Puppeteer] Browser closed.");
+        }
+        // Start Baileys socket regardless so messaging works
+        startWhatsApp();
+    }
+}
+
+// ─── Baileys: actual WhatsApp socket for sending/receiving ──────────────────
+
 async function startWhatsApp() {
-    // Railway fix: Ensure the auth directory exists
     if (!fs.existsSync('./auth_session')) {
         fs.mkdirSync('./auth_session');
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_session');
-    
+
     sock = makeWASocket({
         auth: state,
         logger: pino({ level: 'silent' }),
         browser: ["M-Tech Core", "Chrome", "110.0.0"],
-        connectTimeoutMs: 60000, // Increased timeout for slower cloud boots
+        connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000
     });
 
     sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        
-        if (qr) {
-            console.log(">> QR RECEIVED — generating image...");
-            try {
-                qrCodeImage = await qrcode.toDataURL(qr, {
-                    errorCorrectionLevel: 'H',
-                    margin: 2,
-                    width: 300,
-                    color: { dark: '#000000', light: '#ffffff' }
-                });
-                console.log(">> QR GENERATED SUCCESSFULLY <<");
-            } catch (err) {
-                console.error(">> QR GENERATION FAILED:", err.message);
-                qrCodeImage = null;
-            }
-        }
+        const { connection, lastDisconnect } = update;
 
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             isReady = false;
             qrCodeImage = null;
-            if (shouldReconnect) startWhatsApp();
+            if (shouldReconnect) {
+                console.log(">> [Baileys] Reconnecting...");
+                startWhatsApp();
+            }
         } else if (connection === 'open') {
             isReady = true;
             qrCodeImage = null;
@@ -75,7 +162,7 @@ async function startWhatsApp() {
     sock.ev.on('creds.update', saveCreds);
 }
 
-startWhatsApp();
+startWhatsAppWeb();
 
 // --- MODERN UI ---
 const BASE_STYLES = `
@@ -519,7 +606,7 @@ app.get('/dashboard', (req, res) => {
             <div class="panel-header">
                 <div class="panel-icon">📱</div>
                 <div class="panel-title">Scan to Connect</div>
-                <div class="panel-subtitle">Open WhatsApp on your phone and scan the code below</div>
+                <div class="panel-subtitle">Captured live from WhatsApp Web — scan with your phone</div>
             </div>
             <div class="qr-wrapper">
                 <div class="qr-frame">
@@ -536,10 +623,10 @@ app.get('/dashboard', (req, res) => {
             </div>
             <div class="divider"></div>
             <div style="font-size:12px; color:var(--text-muted); text-align:center;">
-                QR code refreshes automatically every 10 seconds
+                QR code refreshes automatically every 30 seconds
             </div>
         `, `
-            let countdown = 10;
+            let countdown = 30;
             const timer = setInterval(() => {
                 countdown--;
                 if (countdown <= 0) { clearInterval(timer); location.reload(); }
@@ -549,21 +636,21 @@ app.get('/dashboard', (req, res) => {
 
     res.send(renderUI('Initializing', `
         <div class="panel-header">
-            <div class="panel-icon">🔄</div>
-            <div class="panel-title">Starting Engine</div>
-            <div class="panel-subtitle">Establishing secure connection to WhatsApp</div>
+            <div class="panel-icon">🌐</div>
+            <div class="panel-title">Opening WhatsApp Web</div>
+            <div class="panel-subtitle">Launching secure browser and loading QR code</div>
         </div>
         <div class="spinner-wrap">
             <div class="spinner"></div>
             <div class="spinner-text">
                 <strong>Please wait</strong><br>
-                This usually takes 10–20 seconds
+                QR code will appear in 5–10 seconds
             </div>
             <div class="progress-dots">
                 <span></span><span></span><span></span>
             </div>
         </div>
-    `, `setTimeout(() => location.reload(), 5000);`));
+    `, `setTimeout(() => location.reload(), 3000);`));
 });
 
 app.post('/gen', (req, res) => {
