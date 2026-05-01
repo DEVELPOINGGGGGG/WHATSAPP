@@ -1,6 +1,6 @@
 {
   "name": "m-tech-ultimate-railway",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "description": "Ultra-lightweight WhatsApp Engine",
   "main": "server.js",
   "dependencies": {
@@ -10,6 +10,7 @@
     "qrcode": "^1.5.3",
     "pino": "^9.0.0",
     "cors": "^2.8.5",
-    "crypto": "1.0.1"
+    "crypto": "1.0.1",
+    "puppeteer": "^22.0.0"
   }
 }
