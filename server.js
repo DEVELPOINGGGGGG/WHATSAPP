@@ -8,20 +8,17 @@ const pino = require("pino");
 
 const app = express();
 
-// --- BODY PARSERS (CRITICAL FOR FORM BUTTONS) ---
+// --- BODY PARSERS ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// --- SECURE SESSION (FIXED FOR RAILWAY) ---
+// --- SECURE SESSION ---
 app.use(session({
-    secret: 'm-tech-railway-core-v5',
+    secret: 'm-tech-railway-ultra-v6',
     resave: true,
     saveUninitialized: true,
-    cookie: { 
-        secure: false, // Set to true if you use SSL, but false is safer for debugging
-        maxAge: 24 * 60 * 60 * 1000 
-    }
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
 let sock;
@@ -60,7 +57,7 @@ async function startWhatsApp() {
 
 startWhatsApp();
 
-// --- PREMIUM UI (HARDCODED & DECORATED) ---
+// --- PREMIUM UI ENGINE ---
 const renderUI = (title, content, script = '') => `
 <!DOCTYPE html>
 <html lang="en">
@@ -70,9 +67,8 @@ const renderUI = (title, content, script = '') => `
     <title>${title} | M-Tech</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-        body { background: #050505; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; position: relative; }
+        body { background: #050505; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
         
-        /* Premium Background Animation */
         body::before {
             content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background-image: linear-gradient(rgba(0, 255, 136, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 136, 0.05) 1px, transparent 1px);
@@ -97,7 +93,6 @@ const renderUI = (title, content, script = '') => `
         
         button { background: linear-gradient(135deg, #00ff88, #00d2ff); color: #000; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; }
         button:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,255,136,0.4); filter: brightness(1.1); }
-        button:active { transform: translateY(0); }
 
         .status { padding: 10px; border-radius: 50px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.1); }
         .online { color: #00ff88; background: rgba(0, 255, 136, 0.1); border-color: #00ff88; }
@@ -133,12 +128,11 @@ app.post('/login', (req, res) => {
     const { code } = req.body;
     if (code === '7992410411') {
         req.session.isAuth = true;
-        // Forced save to ensure Railway handles the session before redirect
         req.session.save(() => {
             res.redirect('/dashboard');
         });
     } else {
-        res.redirect('/?error=1');
+        res.redirect('/');
     }
 });
 
@@ -177,8 +171,8 @@ app.get('/terminal', (req, res) => {
         <h2>Secure <span>Terminal</span></h2>
         <form id="txForm">
             <input type="password" id="key" placeholder="API Token" required>
-            <input type="number" id="num" placeholder="Target Number (ex: 918383...)" required>
-            <textarea id="msg" placeholder="Transmission Payload..." required></textarea>
+            <input type="number" id="num" placeholder="Target Number" required>
+            <textarea id="msg" placeholder="Payload Message..." required></textarea>
             <button type="submit" id="subBtn">Fire Transmission</button>
         </form>
         <a href="/dashboard" class="footer-link">&larr; BACK TO NODE</a>
@@ -198,8 +192,8 @@ app.get('/terminal', (req, res) => {
                     })
                 });
                 const data = await res.json();
-                alert(data.success ? 'Success: Payload Delivered' : 'Error: Transmission Rejected');
-            } catch(err) { alert('Network Error: Uplink Failed'); }
+                alert(data.success ? 'Success: Delivered' : 'Error: Rejected');
+            } catch(err) { alert('Network Error'); }
             finally { b.innerText = 'Fire Transmission'; b.disabled = false; }
         });
     `));
@@ -209,11 +203,11 @@ app.post('/api/send', async (req, res) => {
     const { k, n, m } = req.body;
     if (k !== validApiKey || !isReady) return res.status(403).json({ success: false });
     try {
-        await sock.sendMessage(\`\${n}@s.whatsapp.net\`, { text: m });
+        // CLEANED: No more backslashes here
+        await sock.sendMessage(`${n}@s.whatsapp.net`, { text: m });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ success: false }); }
 });
 
-// --- DYNAMIC PORT FOR RAILWAY ---
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => console.log(\`M-Tech Engine initialized on port \${PORT}\`));
+app.listen(PORT, '0.0.0.0', () => console.log(`M-Tech Engine Live on Port ${PORT}`));
