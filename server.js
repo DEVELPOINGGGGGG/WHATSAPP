@@ -50,15 +50,15 @@ if (chromeCandidatePaths.length) puppeteerConfig.executablePath = chromeCandidat
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
-  takeoverOnConflict: true,
-  takeoverTimeoutMs: 10000,
-  qrMaxRetries: 0,
-  puppeteer: puppeteerConfig
+  puppeteer: {
+    headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process']
+  }
 });
 
 client.on('qr', async (qr) => {
-  qrCodeImage = await qrcode.toDataURL(qr, { margin: 2, scale: 8 });
-  lastQrAt = new Date().toISOString();
+  qrCodeImage = await qrcode.toDataURL(qr);
   console.log('>> NEW QR GENERATED');
 });
 
@@ -141,10 +141,9 @@ app.get('/dashboard', (req, res) => {
       <section class="head"><div class="title">Link your device</div><div class="status off">Waiting for scan</div></section>
       <div class="panel">
         <h3>Step 1: Open WhatsApp on your phone</h3>
-        <p>Go to Linked Devices and scan this QR code. If you run locally with <b>HEADLESS=false</b>, a real browser opens <b>web.whatsapp.com</b> too.</p>
+        <p>Go to Linked Devices and scan this QR code.</p>
         ${qrCodeImage ? `<div class="qr"><img src="${qrCodeImage}" alt="WhatsApp QR" /></div>` : '<p>Generating QR code…</p>'}
-        <a href="https://web.whatsapp.com" target="_blank" rel="noreferrer"><button class="ghost" type="button">Open WhatsApp Web</button></a>
-        <p class="small">QR last updated: ${lastQrAt || 'waiting...'} | Auto-refresh every 5 seconds.</p>
+        <p class="small">This page auto-refreshes every 5 seconds.</p>
       </div>
     `, 'setTimeout(() => location.reload(), 5000);'));
   }
@@ -211,7 +210,7 @@ app.post('/api/send', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, linked: isReady, hasApiKey: Boolean(validApiKey), headless: isHeadless, node: process.version, platform: os.platform() });
+  res.json({ ok: true, linked: isReady, hasApiKey: Boolean(validApiKey) });
 });
 
 const PORT = process.env.PORT || 8080;
