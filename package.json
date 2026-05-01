@@ -1,6 +1,7 @@
 {
-  "name": "m-tech-core-ultra",
-  "version": "5.0.0",
+  "name": "m-tech-core-v6",
+  "version": "6.0.0",
+  "main": "server.js",
   "dependencies": {
     "whatsapp-web.js": "^1.26.0",
     "puppeteer": "^22.6.0",
