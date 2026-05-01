@@ -5,6 +5,7 @@ const FileStore = require('session-file-store')(session);
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const path = require('path');
+const os = require('os');
 
 const app = express();
 app.use(express.json());
@@ -21,6 +22,31 @@ app.use(session({
 let qrCodeImage = null;
 let isReady = false;
 let validApiKey = null;
+let lastQrAt = null;
+
+const isHeadless = process.env.HEADLESS !== 'false';
+const chromeCandidatePaths = [
+  process.env.PUPPETEER_EXECUTABLE_PATH,
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  '/usr/bin/google-chrome'
+].filter(Boolean);
+
+const puppeteerConfig = {
+  headless: isHeadless ? 'new' : false,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--js-flags=--max-old-space-size=256'
+  ]
+};
+if (chromeCandidatePaths.length) puppeteerConfig.executablePath = chromeCandidatePaths[0];
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
