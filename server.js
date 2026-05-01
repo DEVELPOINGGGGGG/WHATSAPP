@@ -11,81 +11,98 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
+// --- SECURITY HEADERS ---
+app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src 'self' https:; script-src 'unsafe-inline'; style-src 'unsafe-inline';");
+    next();
+});
+
+// --- SESSION CONFIG ---
 app.use(session({
-    secret: 'm-tech-premium-core-key',
+    secret: 'm-tech-render-ultimate-key',
     resave: false,
     saveUninitialized: true
 }));
 
-// --- WhatsApp Client Setup (RENDER CLOUD CONFIG) ---
+// --- WHATSAPP ENGINE (RENDER OPTIMIZED) ---
 let qrCodeImage = null;
 let isReady = false;
 let validApiKey = null;
 
 const client = new Client({
     authStrategy: new LocalAuth(),
+    authTimeoutMs: 120000, 
     puppeteer: { 
+        headless: true,
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu'
+            '--single-process', // CRITICAL FOR RENDER RAM
+            '--no-zygote',
+            '--no-first-run',
+            '--disable-gpu',
+            '--disable-extensions',
+            '--mute-audio'
         ] 
     }
 });
 
 client.on('qr', async (qr) => {
     qrCodeImage = await qrcode.toDataURL(qr);
+    console.log('Engine QR Generated.');
 });
 
 client.on('ready', () => {
-    console.log('\n=========================================');
-    console.log('🚀 M-TECH ENGINE IS LIVE ON RENDER!');
-    console.log('=========================================\n');
+    console.log('\n🚀 M-TECH ENGINE IS FULLY ONLINE ON RENDER!\n');
     isReady = true;
     qrCodeImage = null;
 });
 
-client.on('disconnected', () => {
-    isReady = false;
-    console.log('Engine disconnected.');
-});
-
+client.on('disconnected', () => { isReady = false; });
 client.initialize();
 
-// --- Security & Routing ---
-let failedAttempts = 0;
-
-const renderUI = (content, script = '') => `
+// --- GLOBAL UI TEMPLATE (PREMIUM GLASSMORPHISM) ---
+const renderHTML = (title, content, script = '') => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M-Tech Core Engine</title>
+    <title>${title}</title>
     <style>
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { margin: 0; padding: 0; background: radial-gradient(circle at center, #1b2735 0%, #090a0f 100%); color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
-        body::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 30px 30px; opacity: 0.5; z-index: -1; }
-        .glass-panel { background: rgba(20, 25, 35, 0.65); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.8); max-width: 450px; width: 95%; margin: 20px; animation: slideUp 0.8s ease-out; }
-        h2 { margin-top: 0; font-weight: 300; letter-spacing: 3px; color: #00d2ff; text-transform: uppercase; text-shadow: 0 0 20px rgba(0, 210, 255, 0.4); }
-        input, button { width: 100%; padding: 15px; margin: 12px 0; border-radius: 10px; border: none; outline: none; transition: 0.3s; }
-        input { background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.1); font-size: 16px; }
-        input:focus { border-color: #00d2ff; box-shadow: 0 0 15px rgba(0,210,255,0.2); }
-        button { background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #000; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 1.5px; }
-        button:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(0,210,255,0.4); color: #fff; }
-        .alert { color: #ff3366; font-size: 0.95em; margin-bottom: 15px; font-weight: bold; }
-        .api-key-box { background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; word-wrap: break-word; font-family: monospace; color: #00ff88; border: 1px solid rgba(0,255,136,0.3); margin-top: 10px; }
-        .status { margin: 20px 0; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.4); font-weight: bold; letter-spacing: 1px; }
-        .status.online { border-left: 4px solid #00ff88; color: #00ff88; }
-        .status.offline { border-left: 4px solid #f39c12; color: #f39c12; }
-        hr { border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); margin: 30px 0; }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background: #050508; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
+        body::before { 
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background-image: linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 210, 255, 0.03) 1px, transparent 1px); 
+            background-size: 40px 40px; z-index: -1; transform: perspective(600px) rotateX(60deg) translateY(-50px) translateZ(-200px); animation: gridScan 15s linear infinite;
+        }
+        @keyframes gridScan { from { background-position: 0 0; } to { background-position: 0 40px; } }
+        .glass-panel { 
+            background: rgba(12, 15, 20, 0.75); backdrop-filter: blur(25px); border: 1px solid rgba(0, 255, 136, 0.15); border-top: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 20px; padding: 45px 40px; box-shadow: 0 30px 60px rgba(0,0,0,0.9), inset 0 0 20px rgba(0,255,136,0.05); max-width: 480px; width: 95%; position: relative; animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        h2 { font-weight: 300; letter-spacing: 4px; color: #fff; text-transform: uppercase; text-align: center; margin-bottom: 35px; text-shadow: 0 0 20px rgba(255, 255, 255, 0.2); }
+        h2 span { color: #00ff88; font-weight: 800; text-shadow: 0 0 15px rgba(0, 255, 136, 0.5); }
+        label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; display: block; font-weight: 600; }
+        input, textarea, button { width: 100%; padding: 16px; margin-bottom: 24px; border-radius: 10px; border: none; outline: none; transition: all 0.3s ease; }
+        input, textarea { background: rgba(0,0,0,0.6); color: #00d2ff; border: 1px solid rgba(255,255,255,0.08); font-size: 15px; font-family: monospace; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8); }
+        input:focus, textarea:focus { border-color: #00ff88; box-shadow: 0 0 20px rgba(0,255,136,0.15), inset 0 2px 8px rgba(0,0,0,0.8); background: rgba(0,0,0,0.9); }
+        textarea { resize: vertical; min-height: 120px; color: #ddd; font-family: 'Segoe UI', sans-serif; line-height: 1.6; }
+        button { background: linear-gradient(135deg, #00ff88 0%, #00b8ff 100%); color: #000; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; font-size: 14px; box-shadow: 0 8px 20px rgba(0,255,136,0.25); }
+        button:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(0,255,136,0.4); color: #fff; }
+        .alert { color: #ff3366; font-size: 13px; margin-bottom: 20px; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+        .status-box { padding: 15px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; text-align: center; letter-spacing: 2px; text-transform: uppercase; }
+        .online { background: rgba(0, 255, 136, 0.1); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); }
+        .offline { background: rgba(255, 51, 102, 0.1); color: #ff3366; border: 1px solid rgba(255, 51, 102, 0.3); }
+        .api-key-box { background: #000; padding: 15px; border-radius: 8px; font-family: monospace; color: #00ff88; font-size: 13px; word-break: break-all; border: 1px solid #333; margin-top: 10px; }
+        
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
-        .toast { background: rgba(15, 20, 25, 0.95); backdrop-filter: blur(15px); color: white; padding: 18px 25px; margin-bottom: 15px; border-radius: 12px; border-left: 4px solid #00d2ff; box-shadow: 0 15px 35px rgba(0,0,0,0.6); animation: slideIn 0.5s forwards; font-weight: 500; }
-        @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(50px); } to { opacity: 1; transform: translateY(0); } }
+        .toast { background: rgba(10, 12, 16, 0.98); backdrop-filter: blur(15px); color: white; padding: 18px 25px; margin-bottom: 15px; border-radius: 10px; border-left: 4px solid #00ff88; box-shadow: 0 20px 40px rgba(0,0,0,0.9); animation: slideIn 0.4s forwards; font-weight: 600; letter-spacing: 0.5px; font-size: 14px; }
+        @keyframes slideIn { from { transform: translateX(120%); } to { transform: translateX(0); } }
+        @keyframes slideOut { from { transform: translateX(0); } to { transform: translateX(120%); opacity: 0; } }
     </style>
 </head>
 <body>
@@ -99,21 +116,24 @@ const renderUI = (content, script = '') => `
             if (isError) toast.style.borderLeftColor = '#ff3366';
             toast.innerText = message;
             container.appendChild(toast);
-            setTimeout(() => { toast.style.animation = 'slideOut 0.5s forwards'; setTimeout(() => toast.remove(), 500); }, 4000);
+            setTimeout(() => { toast.style.animation = 'slideOut 0.4s forwards'; setTimeout(() => toast.remove(), 400); }, 4000);
         }
         ${script}
     </script>
 </body>
 </html>`;
 
+// --- ROUTE 1: SECURE LOGIN ---
+let failedAttempts = 0;
 app.get('/', (req, res) => {
     if (req.session.isLoggedIn) return res.redirect('/dashboard');
-    res.send(renderUI(`
-        <h2>M-Tech Core</h2>
+    res.send(renderHTML('Engine Auth', `
+        <h2>M-Tech <span>Core</span></h2>
         <div class="alert">${req.session.error || ''}</div>
         <form action="/login" method="POST">
-            <input type="password" name="password" placeholder="Enter Access Code" required autocomplete="off">
-            <button type="submit">Initialize Server</button>
+            <label>Master Access Code</label>
+            <input type="password" name="password" placeholder="Enter Authentication Key..." required>
+            <button type="submit">Unlock System</button>
         </form>
     `));
     req.session.error = null;
@@ -127,59 +147,38 @@ app.post('/login', async (req, res) => {
     } else {
         failedAttempts++;
         if (failedAttempts >= 3) {
-            failedAttempts = 0;
-            isReady = false;
+            failedAttempts = 0; isReady = false;
             try { await fs.remove('./.wwebjs_auth'); await client.destroy(); client.initialize(); } catch (err) {}
-            req.session.error = 'SECURITY BREACH: System wiped.';
-        } else { req.session.error = `ACCESS DENIED. ${3 - failedAttempts} attempts remaining.`; }
+            req.session.error = 'BREACH DETECTED: Engine Wiped.';
+        } else { req.session.error = `ACCESS DENIED. ${3 - failedAttempts} Tries Left.`; }
         res.redirect('/');
     }
 });
 
+// --- ROUTE 2: THE BACKEND DASHBOARD ---
 app.get('/dashboard', (req, res) => {
     if (!req.session.isLoggedIn) return res.redirect('/');
-    let content = `<h2>Core Dashboard</h2>`;
+    let content = `<h2>System <span>Control</span></h2>`;
     let script = ``;
-    
+
     if (!isReady) {
-        content += `<div class="status offline">STATUS: AWAITING SCAN</div>`;
+        content += `<div class="status-box offline">STATUS: AWAITING UPLINK</div>`;
         if (qrCodeImage) {
-            content += `<img src="${qrCodeImage}" alt="QR" style="border-radius: 15px; margin: 20px 0; width: 85%;">`;
-            script = `setTimeout(() => location.reload(), 5000);`; 
+            content += `<img src="${qrCodeImage}" style="width: 100%; border-radius: 12px; border: 2px solid rgba(0,255,136,0.2);">`;
+            script = `setTimeout(() => location.reload(), 5000);`;
         } else {
-            content += `<p style="color:#00d2ff;">Generating Engine Protocols...</p>`;
+            content += `<p style="text-align:center; color:#888; font-family:monospace;">INITIALIZING ENGINE PROTOCOLS...</p>`;
             script = `setTimeout(() => location.reload(), 3000);`;
         }
     } else {
-        content += `<div class="status online">STATUS: SYSTEM ONLINE</div>`;
-        content += `<hr><h3 style="font-weight:300; font-size:1.2em; color:#aaa;">Test Transmission</h3>
-        <form id="testMsgForm" onsubmit="sendTestMessage(event)">
-            <input type="number" id="testNumber" placeholder="919876543210 (Country Code Req)" required>
-            <input type="text" id="testMsg" placeholder="Enter message payload..." required>
-            <button type="submit" style="background: linear-gradient(135deg, #00ff88 0%, #00c3ff 100%);">Dispatch</button>
-        </form><hr>`;
-        content += `<form action="/generate-key" method="POST"><button type="submit">Generate Web API Key</button></form>`;
+        content += `<div class="status-box online">STATUS: ENGINE ACTIVE</div>`;
+        content += `<form action="/generate-key" method="POST"><button type="submit">Generate API Key</button></form>`;
         if (validApiKey) {
-            content += `<p style="font-size: 12px; color: #888;">M-TECH AUTHORIZED KEY:</p><div class="api-key-box">${validApiKey}</div>`;
+            content += `<label style="margin-top:20px;">AUTHORIZED API KEY:</label><div class="api-key-box">${validApiKey}</div>`;
         }
-        script = `
-        async function sendTestMessage(e) {
-            e.preventDefault();
-            const btn = e.target.querySelector('button');
-            const orig = btn.innerText;
-            btn.innerText = 'DISPATCHING...';
-            try {
-                const res = await fetch('/api/send-message-internal', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: document.getElementById('testNumber').value, message: document.getElementById('testMsg').value })
-                });
-                const data = await res.json();
-                if(data.success) showToast(data.message); else showToast(data.error, true);
-            } catch (err) { showToast('Network link severed.', true); } 
-            finally { btn.innerText = orig; document.getElementById('testMsg').value = ''; }
-        }`;
+        content += `<br><a href="/terminal" style="display:block; text-align:center; color:#00d2ff; text-decoration:none; font-family:monospace; margin-top:20px; letter-spacing:1px;">&rarr; LAUNCH SECURE TERMINAL</a>`;
     }
-    res.send(renderUI(content, script));
+    res.send(renderHTML('Dashboard', content, script));
 });
 
 app.post('/generate-key', (req, res) => {
@@ -188,24 +187,68 @@ app.post('/generate-key', (req, res) => {
     res.redirect('/dashboard');
 });
 
-app.post('/api/send-message-internal', async (req, res) => {
-    if (!req.session.isLoggedIn) return res.status(401).json({ error: 'Unauthorized Access' });
-    if (!isReady) return res.status(503).json({ error: 'Engine Offline' });
-    try {
-        await client.sendMessage(`${req.body.number}@c.us`, req.body.message);
-        res.json({ success: true, message: 'Transmission Successful!' });
-    } catch (err) { res.status(500).json({ error: 'Transmission Failed.' }); }
+// --- ROUTE 3: THE HIGH-END REMOTE TERMINAL ---
+app.get('/terminal', (req, res) => {
+    // Note: The terminal is publicly accessible, but it REQUIRES the exact API key to actually send a message.
+    let content = `
+        <h2>Secure <span>Terminal</span></h2>
+        <form id="remoteForm">
+            <label>API Authorization Key</label>
+            <input type="password" id="apiKey" placeholder="Paste your generated key..." required>
+
+            <label>Target Phone Number</label>
+            <input type="number" id="targetNumber" placeholder="919876543210" required>
+
+            <label>Encrypted Payload</label>
+            <textarea id="messageBody" placeholder="Enter transmission data..." required></textarea>
+
+            <button type="submit" id="submitBtn">Transmit Payload</button>
+        </form>
+    `;
+    
+    let script = `
+        document.getElementById('remoteForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const origText = btn.innerText;
+            
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const number = document.getElementById('targetNumber').value.trim();
+            const message = document.getElementById('messageBody').value.trim();
+
+            btn.innerText = 'TRANSMITTING...'; btn.disabled = true;
+
+            try {
+                // Calls the local API endpoint on the same Render server
+                const response = await fetch('/api/send-message', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey, number, message })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    showToast('Transmission Successful!');
+                    document.getElementById('messageBody').value = '';
+                } else { showToast(data.error || 'Server rejected transmission.', true); }
+            } catch (error) { showToast('Connection failed. Engine offline?', true); } 
+            finally { btn.innerText = origText; btn.disabled = false; }
+        });
+    `;
+    res.send(renderHTML('Terminal', content, script));
 });
 
+// --- ROUTE 4: THE ACTUAL API ENDPOINT ---
 app.post('/api/send-message', async (req, res) => {
     const { apiKey, number, message } = req.body;
-    if (!validApiKey || apiKey !== validApiKey) return res.status(403).json({ error: 'Invalid API Key' });
-    if (!isReady) return res.status(503).json({ error: 'Engine Offline' });
+    if (!validApiKey || apiKey !== validApiKey) return res.status(403).json({ error: 'INVALID AUTHORIZATION KEY' });
+    if (!isReady) return res.status(503).json({ error: 'ENGINE OFFLINE OR SYNCING' });
+
     try {
         await client.sendMessage(`${number}@c.us`, message);
         res.json({ success: true, message: 'Transmission Successful!' });
-    } catch (err) { res.status(500).json({ error: 'Transmission Failed.' }); }
+    } catch (err) { res.status(500).json({ error: 'TRANSMISSION FAILED' }); }
 });
 
+// --- START SERVER ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => { console.log(`\nServer Initialized on Port ${PORT}`); });
+app.listen(PORT, () => console.log(`\nCORE ENGINE INITIALIZED ON PORT ${PORT}\n`));
