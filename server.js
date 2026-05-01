@@ -4,6 +4,7 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 const qrcode = require('qrcode');
 const crypto = require('crypto');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
@@ -12,7 +13,7 @@ app.use(express.urlencoded({ extended: true }));
 // --- BUG FIX: Kill the MemoryStore Warning ---
 app.use(session({
     store: new FileStore({ path: './sessions', retries: 0 }),
-    secret: 'm-tech-ultra-obsidian',
+    secret: 'm-tech-v6-obsidian',
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 86400000 }
@@ -22,17 +23,18 @@ let qrCodeImage = null;
 let isReady = false;
 let validApiKey = null;
 
-// --- CHROME ENGINE CONFIG ---
+// --- DYNAMIC CHROME ENGINE (RAILWAY FIX) ---
 const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: './m_tech_auth' }),
+    authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
     puppeteer: {
         headless: true,
+        // Checks multiple paths so it never fails to launch
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium' || '/usr/bin/chromium-browser',
         args: [
             '--no-sandbox', '--disable-setuid-sandbox',
             '--disable-dev-shm-usage', '--disable-gpu',
-            '--single-process', '--no-zygote'
-        ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null
+            '--no-zygote', '--single-process'
+        ]
     }
 });
 
@@ -44,58 +46,47 @@ client.on('qr', async (qr) => {
 client.on('ready', () => {
     isReady = true;
     qrCodeImage = null;
-    console.log('>> CORE UPLINK STABLE');
+    console.log('>> M-TECH ENGINE ONLINE');
 });
 
-client.initialize().catch(err => console.error('>> ENGINE CRASH:', err));
+client.initialize().catch(err => console.error('>> ENGINE FAILED:', err.message));
 
-// --- PREMIUM DECORATED UI ---
+// --- DECORATED UI (OBSIDIAN THEME) ---
 const renderUI = (title, content, script = '') => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>${title} | M-TECH CORE</title>
+    <title>${title} | M-TECH</title>
     <style>
-        * { box-sizing: border-box; font-family: 'Inter', 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-        body { 
-            background: #050608; color: #fff; display: flex; justify-content: center; 
-            align-items: center; min-height: 100vh; overflow: hidden;
-        }
-        /* Tech Grid Background */
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+        body { background: #050505; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
         body::before {
-            content: ""; position: absolute; width: 200%; height: 200%;
-            background-image: radial-gradient(#1a1a1a 1px, transparent 1px);
-            background-size: 30px 30px; transform: rotate(15deg); z-index: -1; opacity: 0.4;
+            content: ""; position: absolute; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, #00ff8811 0%, transparent 80%);
+            z-index: -1;
         }
         .container {
-            background: rgba(10, 11, 14, 0.85); backdrop-filter: blur(25px);
-            border: 1px solid rgba(0, 255, 136, 0.15); border-radius: 24px;
-            padding: 40px; width: 95%; max-width: 450px; text-align: center;
-            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 255, 136, 0.05);
-            animation: slideUp 0.7s ease;
+            background: rgba(15, 15, 15, 0.9); backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 28px;
+            padding: 45px; width: 95%; max-width: 460px; text-align: center;
+            box-shadow: 0 50px 100px rgba(0,0,0,0.9), 0 0 30px rgba(0, 255, 136, 0.1);
         }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        h2 { font-weight: 800; letter-spacing: -1px; margin-bottom: 30px; font-size: 28px; }
-        h2 span { color: #00ff88; text-shadow: 0 0 20px rgba(0, 255, 136, 0.4); }
+        h2 { font-weight: 900; letter-spacing: -1.5px; font-size: 32px; margin-bottom: 25px; }
+        h2 span { color: #00ff88; text-shadow: 0 0 15px #00ff8866; }
         .pill { 
-            display: inline-block; padding: 6px 16px; border-radius: 100px; 
-            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
-            margin-bottom: 25px; border: 1px solid;
+            display: inline-block; padding: 8px 18px; border-radius: 50px; font-size: 10px; 
+            font-weight: 800; text-transform: uppercase; margin-bottom: 20px; border: 1px solid;
         }
-        .on { color: #00ff88; background: rgba(0, 255, 136, 0.1); border-color: #00ff88; }
-        .off { color: #ff3366; background: rgba(255, 51, 102, 0.1); border-color: #ff3366; }
-        input, textarea, button { width: 100%; padding: 16px; margin: 10px 0; border-radius: 12px; border: none; transition: 0.3s; }
-        input, textarea { background: #000; color: #00ff88; border: 1px solid #222; font-family: 'Fira Code', monospace; font-size: 13px; }
-        input:focus { border-color: #00ff88; box-shadow: 0 0 15px rgba(0, 255, 136, 0.1); outline: none; }
-        button { 
-            background: linear-gradient(135deg, #00ff88, #00d2ff); color: #000; 
-            font-weight: 900; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
-        }
-        button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0, 255, 136, 0.3); }
-        .qr-wrap { background: #fff; padding: 12px; border-radius: 18px; margin: 20px auto; width: 240px; }
+        .on { color: #00ff88; background: #00ff8811; border-color: #00ff88; }
+        .off { color: #ff3366; background: #ff336611; border-color: #ff3366; }
+        input, textarea, button { width: 100%; padding: 16px; margin: 10px 0; border-radius: 14px; border: none; transition: 0.2s; }
+        input, textarea { background: #000; color: #00ff88; border: 1px solid #222; font-family: monospace; }
+        input:focus { border-color: #00ff88; outline: none; }
+        button { background: #00ff88; color: #000; font-weight: 900; cursor: pointer; text-transform: uppercase; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px #00ff8833; }
+        .qr-wrap { background: #fff; padding: 15px; border-radius: 20px; margin: 20px auto; width: 250px; box-shadow: 0 0 30px #00ff8822; }
         .qr-wrap img { width: 100%; display: block; }
-        .footer { font-size: 11px; color: #555; margin-top: 25px; text-decoration: none; display: block; }
     </style>
 </head>
 <body>
@@ -104,23 +95,23 @@ const renderUI = (title, content, script = '') => `
 </body>
 </html>`;
 
-// --- CORE ROUTES ---
+// --- ROUTES ---
 
 app.get('/', (req, res) => {
     if (req.session.isAuth) return res.redirect('/dashboard');
     res.send(renderUI('Login', `
         <h2>M-TECH <span>CORE</span></h2>
         <form action="/login" method="POST">
-            <input type="password" name="k" placeholder="MASTER ACCESS CODE" required>
-            <button type="submit">AUTHORIZE</button>
+            <input type="password" name="k" placeholder="SYSTEM ACCESS CODE" required>
+            <button type="submit">UNSEAL ENGINE</button>
         </form>
     `));
 });
 
 app.post('/login', (req, res) => {
-    if (req.body.k === '7992410411') { 
-        req.session.isAuth = true; 
-        req.session.save(() => res.redirect('/dashboard')); 
+    if (req.body.k === '7992410411') {
+        req.session.isAuth = true;
+        req.session.save(() => res.redirect('/dashboard'));
     } else res.redirect('/');
 });
 
@@ -128,36 +119,34 @@ app.get('/dashboard', (req, res) => {
     if (!req.session.isAuth) return res.redirect('/');
     
     if (isReady) {
-        return res.send(renderUI('Dashboard', `
+        return res.send(renderUI('Ready', `
             <div class="pill on">UPLINK ACTIVE</div>
-            <h2>SYSTEM <span>NODE</span></h2>
-            <form action="/key" method="POST"><button>GENERATE TOKEN</button></form>
-            ${validApiKey ? `<div style="background:#000; padding:15px; border-radius:8px; color:#00ff88; font-size:12px; font-family:monospace; margin:15px 0; word-break:break-all;">${validApiKey}</div>` : ''}
-            <div style="margin-top:20px; border-top:1px solid #1a1a1a; padding-top:20px;">
-                <input id="target" placeholder="91XXXXXXXXXX">
-                <textarea id="payload" placeholder="TRANSMISSION DATA..." rows="3"></textarea>
-                <button id="sendBtn" onclick="transmit()">FIRE TRANSMISSION</button>
+            <h2>ENGINE <span>READY</span></h2>
+            <form action="/key" method="POST"><button>GENERATE API TOKEN</button></form>
+            ${validApiKey ? `<div style="background:#000; padding:15px; color:#00ff88; font-family:monospace; font-size:12px; margin-top:15px; word-break:break-all; border-radius:10px; border:1px dashed #333;">${validApiKey}</div>` : ''}
+            <div style="margin-top:25px; border-top:1px solid #222; padding-top:25px;">
+                <input id="n" placeholder="91XXXXXXXXXX">
+                <textarea id="m" placeholder="MESSAGE PAYLOAD..." rows="3"></textarea>
+                <button id="s" onclick="fire()">FIRE TRANSMISSION</button>
             </div>
-            <a href="/" class="footer">LOGOUT SYSTEM</a>
         `, `
-            async function transmit() {
-                const btn = document.getElementById('sendBtn');
-                btn.innerText = 'FIRING...';
+            async function fire() {
+                const b = document.getElementById('s'); b.innerText = 'TRANSMITTING...';
                 const r = await fetch('/api/send', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ k: '${validApiKey}', n: document.getElementById('target').value, m: document.getElementById('payload').value })
+                    body: JSON.stringify({ k: '${validApiKey}', n: document.getElementById('n').value, m: document.getElementById('m').value })
                 });
                 const d = await r.json();
-                alert(d.success ? 'TRANSMISSION SUCCESS' : 'LINK REJECTED');
-                btn.innerText = 'FIRE TRANSMISSION';
+                alert(d.success ? 'SUCCESS' : 'LINK FAILED');
+                b.innerText = 'FIRE TRANSMISSION';
             }
         `));
     }
 
-    res.send(renderUI('Connecting', `
-        <div class="pill off">SYNCING CORE</div>
-        <h2>SYNC <span>PORTAL</span></h2>
-        ${qrCodeImage ? `<div class="qr-wrap"><img src="${qrCodeImage}"></div>` : '<p style="color:#00ff88;">WAKING CHROME ENGINE...</p>'}
+    res.send(renderUI('Syncing', `
+        <div class="pill off">SYNCING SYSTEM</div>
+        <h2>HANDSHAKE <span>NODE</span></h2>
+        ${qrCodeImage ? `<div class="qr-wrap"><img src="${qrCodeImage}"></div>` : '<p style="color:#00ff88;">INITIALIZING CHROMIUM...</p>'}
     `, `setTimeout(() => location.reload(), 5000);`));
 });
 
@@ -176,4 +165,4 @@ app.post('/api/send', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => console.log('M-TECH UPLINK ON PORT ' + PORT));
+app.listen(PORT, '0.0.0.0', () => console.log('M-TECH UPLINK ON ' + PORT));
