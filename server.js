@@ -6,7 +6,6 @@ const qrcode = require('qrcode');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(express.json());
@@ -42,14 +41,6 @@ const resolvedChromePath = chromeCandidatePaths.find((p) => {
   }
 });
 
-const bundledChromePath = (() => {
-  try {
-    return puppeteer.executablePath();
-  } catch (_) {
-    return null;
-  }
-})();
-
 const puppeteerConfig = {
   headless: isHeadless ? 'new' : false,
   args: [
@@ -64,7 +55,7 @@ const puppeteerConfig = {
     '--js-flags=--max-old-space-size=256'
   ]
 };
-if (resolvedChromePath || bundledChromePath) puppeteerConfig.executablePath = resolvedChromePath || bundledChromePath;
+if (resolvedChromePath) puppeteerConfig.executablePath = resolvedChromePath;
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
