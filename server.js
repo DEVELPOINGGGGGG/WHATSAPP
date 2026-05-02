@@ -15,6 +15,15 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// IMPORTANT: Session middleware MUST be defined before routes!
+app.use(session({
+  store: MongoStore.create({ mongoUrl: MONGO_URI, dbName: DB_NAME, ttl: 60 * 60 * 24 * 14, autoRemove: 'native' }),
+  secret: process.env.SESSION_SECRET || 'change-me-in-render',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 86400000 }
+}));
+
 let mongoClient;
 let db;
 let appState;
@@ -263,20 +272,16 @@ async function start() {
   db = mongoClient.db(DB_NAME);
   appState = db.collection('app_state');
 
-  app.use(session({
-    store: MongoStore.create({ mongoUrl: MONGO_URI, dbName: DB_NAME, ttl: 60 * 60 * 24 * 14, autoRemove: 'native' }),
-    secret: process.env.SESSION_SECRET || 'change-me-in-render',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 86400000 }
-  }));
-
   console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
   client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
- // Use Render's PORT or default to 10000
-const PORT = process.env.PORT || 10000; 
+  // Use Render's PORT or default to 10000
+  const PORT = process.env.PORT || 10000; 
 
-app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`>> Server is hitting the airwaves on port ${PORT}`);
-});
+  });
+} // <--- THIS MISSING BRACKET CAUSED YOUR ERROR
+
+// THIS LINE WAS ALSO MISSING, WHICH PREVENTED THE SERVER FROM STARTING
+start();
