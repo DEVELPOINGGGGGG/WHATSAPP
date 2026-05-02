@@ -1,5 +1,8 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, RemoteAuth } = require('whatsapp-web.js');
+const { MongoStore: WWebJSMongoStore } = require('wwebjs-mongo');
+const mongoose = require('mongoose');
 const express = require('express');
+const cors = require('cors'); // <-- CORS IMPORTED HERE
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const { MongoClient } = require('mongodb');
@@ -12,6 +15,14 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mtechcalibrationin_db_
 const DB_NAME = process.env.MONGO_DB_NAME || 'whatsapp_panel';
 
 const app = express();
+
+// <-- CORS ENABLED HERE (Allows all domains to access your API)
+app.use(cors({
+    origin: '*', // You can change this to 'https://mtechcalibration.in' later for extra security
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -30,6 +41,7 @@ let appState;
 let qrCodeImage = null;
 let isReady = false;
 let myProfilePic = null;
+let client; // We declare the client globally so your API routes can use it
 
 const isHeadless = process.env.HEADLESS !== 'false';
 const chromeCandidatePaths = [
@@ -69,11 +81,6 @@ const puppeteerConfig = {
   ]
 };
 if (resolvedChromePath) puppeteerConfig.executablePath = resolvedChromePath;
-
-const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
-  puppeteer: puppeteerConfig
-});
 
 async function getApiKeys() {
   const state = await appState.findOne({ _id: 'main' }, { projection: { apiKeys: 1 } });
@@ -120,29 +127,6 @@ async function getStorageInfo() {
     storageBackend: 'MongoDB'
   };
 }
-
-client.on('qr', async (qr) => {
-  qrCodeImage = await qrcode.toDataURL(qr);
-  console.log('>> NEW QR GENERATED');
-});
-
-client.on('ready', async () => {
-  isReady = true;
-  qrCodeImage = null;
-  try {
-    if (client.info?.wid?._serialized) {
-      myProfilePic = await client.getProfilePicUrl(client.info.wid._serialized);
-    }
-  } catch (_) {
-    myProfilePic = null;
-  }
-  console.log('>> WHATSAPP LINKED');
-});
-
-client.on('disconnected', () => {
-  isReady = false;
-  myProfilePic = null;
-});
 
 const renderUI = (title, content, script = '') => `<!DOCTYPE html>
 <html lang="en">
@@ -244,6 +228,7 @@ app.post('/key/delete', async (req, res) => {
   res.redirect('/dashboard');
 });
 
+// The CORS package we added at the top allows this endpoint to be called securely from your frontend!
 app.post('/api/send', async (req, res) => {
   const { k, n, m } = req.body;
   if (!isReady) return res.status(503).json({ success: false, error: 'WhatsApp not linked yet' });
@@ -267,12 +252,56 @@ app.get('/api/health', async (_req, res) => {
 });
 
 async function start() {
+  // 1. Connect MongoDB for the dashboard rules and session state
   mongoClient = new MongoClient(MONGO_URI, { maxPoolSize: 3, minPoolSize: 0, maxIdleTimeMS: 10000 });
   await mongoClient.connect();
   db = mongoClient.db(DB_NAME);
   appState = db.collection('app_state');
 
+  // 2. Connect Mongoose directly to the same database for RemoteAuth
+  await mongoose.connect(MONGO_URI, { dbName: DB_NAME });
+  const store = new WWebJSMongoStore({ mongoose: mongoose });
+
   console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
+
+  // 3. Setup Client using MongoDB to save tokens
+  client = new Client({
+    authStrategy: new RemoteAuth({
+      store: store,
+      backupSyncIntervalMs: 300000 // Saves to database every 5 minutes
+    }),
+    puppeteer: puppeteerConfig
+  });
+
+  // 4. Client Listeners
+  client.on('qr', async (qr) => {
+    qrCodeImage = await qrcode.toDataURL(qr);
+    console.log('>> NEW QR GENERATED');
+  });
+
+  client.on('ready', async () => {
+    isReady = true;
+    qrCodeImage = null;
+    try {
+      if (client.info?.wid?._serialized) {
+        myProfilePic = await client.getProfilePicUrl(client.info.wid._serialized);
+      }
+    } catch (_) {
+      myProfilePic = null;
+    }
+    console.log('>> WHATSAPP LINKED & SAVED TO MONGODB');
+  });
+
+  client.on('remote_session_saved', () => {
+    console.log('>> WhatsApp Authentication Token Synced with DB');
+  });
+
+  client.on('disconnected', () => {
+    isReady = false;
+    myProfilePic = null;
+  });
+
+  // Start the engine
   client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
   // Use Render's PORT or default to 10000
@@ -281,7 +310,6 @@ async function start() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`>> Server is hitting the airwaves on port ${PORT}`);
   });
-} // <--- THIS MISSING BRACKET CAUSED YOUR ERROR
+}
 
-// THIS LINE WAS ALSO MISSING, WHICH PREVENTED THE SERVER FROM STARTING
 start();
