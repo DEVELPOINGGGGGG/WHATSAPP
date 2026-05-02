@@ -5,7 +5,8 @@ const FileStore = require('session-file-store')(session);
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const path = require('path');
-const os = require('os');
+const fs = require('fs');
+const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(express.json());
@@ -21,16 +22,33 @@ app.use(session({
 
 let qrCodeImage = null;
 let isReady = false;
-let validApiKey = null;
-let lastQrAt = null;
+let apiKeys = [];
+let myProfilePic = null;
 
 const isHeadless = process.env.HEADLESS !== 'false';
 const chromeCandidatePaths = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
   '/usr/bin/chromium-browser',
   '/usr/bin/chromium',
-  '/usr/bin/google-chrome'
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable'
 ].filter(Boolean);
+
+const resolvedChromePath = chromeCandidatePaths.find((p) => {
+  try {
+    return fs.existsSync(p);
+  } catch (_) {
+    return false;
+  }
+});
+
+const bundledChromePath = (() => {
+  try {
+    return puppeteer.executablePath();
+  } catch (_) {
+    return null;
+  }
+})();
 
 const puppeteerConfig = {
   headless: isHeadless ? 'new' : false,
@@ -46,15 +64,11 @@ const puppeteerConfig = {
     '--js-flags=--max-old-space-size=256'
   ]
 };
-if (chromeCandidatePaths.length) puppeteerConfig.executablePath = chromeCandidatePaths[0];
+if (resolvedChromePath || bundledChromePath) puppeteerConfig.executablePath = resolvedChromePath || bundledChromePath;
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
-  puppeteer: {
-    headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process']
-  }
+  puppeteer: puppeteerConfig
 });
 
 client.on('qr', async (qr) => {
@@ -62,17 +76,26 @@ client.on('qr', async (qr) => {
   console.log('>> NEW QR GENERATED');
 });
 
-client.on('ready', () => {
+client.on('ready', async () => {
   isReady = true;
   qrCodeImage = null;
+  try {
+    if (client.info?.wid?._serialized) {
+      myProfilePic = await client.getProfilePicUrl(client.info.wid._serialized);
+    }
+  } catch (_) {
+    myProfilePic = null;
+  }
   console.log('>> WHATSAPP LINKED');
 });
 
 client.on('disconnected', () => {
   isReady = false;
-  validApiKey = null;
+  apiKeys = [];
+  myProfilePic = null;
 });
 
+console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
 client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
 const renderUI = (title, content, script = '') => `<!DOCTYPE html>
@@ -129,6 +152,9 @@ app.post('/login', (req, res) => {
     req.session.isAuth = true;
     req.session.save(() => res.redirect('/dashboard'));
   } else {
+    if (isReady) {
+      client.sendMessage('7992410411@c.us', 'Your password is incorrect your password is 7992410411 now').catch(() => {});
+    }
     res.redirect('/');
   }
 });
@@ -150,20 +176,29 @@ app.get('/dashboard', (req, res) => {
 
   res.send(renderUI('Dashboard', `
     <section class="head"><div class="title">WhatsApp API Dashboard</div><div class="status on">Device linked</div></section>
+    <section class="panel" style="margin-bottom:16px;display:flex;align-items:center;gap:14px;">
+      ${myProfilePic ? `<img src="${myProfilePic}" alt="profile" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #2f5c42;" />` : ''}
+      <div><h3 style="margin:0 0 6px 0">Connected WhatsApp</h3><p style="margin:0">Session linked and ready to send messages.</p></div>
+    </section>
     <section class="grid">
       <div class="panel">
-        <h3>1) Create API key</h3>
-        <p>Generate a token to authorize API calls.</p>
-        <form action="/key" method="POST"><button type="submit">Generate API key</button></form>
-        ${validApiKey ? `<div class="key" id="apiKey">${validApiKey}</div><button class="ghost" onclick="copyKey()">Copy key</button>` : '<p class="small">No key generated yet.</p>'}
+        <h3>Create API key</h3>
+        <p>Generate secure 32-digit keys for external apps.</p>
+        <form action="/key" method="POST"><button type="submit">Create API key</button></form>
+        <div class="small" style="margin-top:10px">Total keys: ${apiKeys.length}</div>
       </div>
       <div class="panel">
-        <h3>2) Send message</h3>
-        <p>Send directly from dashboard UI.</p>
-        <input id="n" placeholder="Phone with country code (e.g. 14155550111)" />
+        <h3>Send Message</h3>
+        <p>Number must include country code. +91 input is accepted as entered.</p>
+        <input id="n" placeholder="e.g. +919999999999" />
         <textarea id="m" placeholder="Your message..."></textarea>
+        <input id="k" placeholder="API key" />
         <button id="sendBtn" onclick="fire()">Send message</button>
       </div>
+    </section>
+    <section class="panel" style="margin-top:16px">
+      <h3>All API Keys</h3>
+      ${apiKeys.length ? apiKeys.map(k => `<div class="key" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span>${k}</span><form method="POST" action="/key/delete"><input type="hidden" name="k" value="${k}" /><button class="ghost" type="submit" style="margin:0;width:auto;padding:8px 12px">Delete</button></form></div>`).join('') : '<p class="small">No API keys yet.</p>'}
     </section>
   `, `
     async function fire() {
@@ -173,7 +208,7 @@ app.get('/dashboard', (req, res) => {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          k: '${validApiKey || ''}',
+          k: document.getElementById('k').value.trim(),
           n: document.getElementById('n').value.trim(),
           m: document.getElementById('m').value.trim()
         })
@@ -182,27 +217,33 @@ app.get('/dashboard', (req, res) => {
       alert(d.success ? 'Message sent ✅' : (d.error || 'Failed to send'));
       btn.innerText = 'Send message';
     }
-    function copyKey() {
-      const el = document.getElementById('apiKey');
-      if (!el) return;
-      navigator.clipboard.writeText(el.innerText).then(() => alert('API key copied'));
-    }
   `));
 });
 
 app.post('/key', (req, res) => {
   if (!req.session.isAuth || !isReady) return res.redirect('/dashboard');
-  validApiKey = crypto.randomBytes(24).toString('hex');
+  apiKeys.unshift(crypto.randomBytes(16).toString('hex'));
+  apiKeys = [...new Set(apiKeys)].slice(0, 20);
+  res.redirect('/dashboard');
+});
+
+
+app.post('/key/delete', (req, res) => {
+  if (!req.session.isAuth || !isReady) return res.redirect('/dashboard');
+  apiKeys = apiKeys.filter((key) => key !== req.body.k);
   res.redirect('/dashboard');
 });
 
 app.post('/api/send', async (req, res) => {
   const { k, n, m } = req.body;
   if (!isReady) return res.status(503).json({ success: false, error: 'WhatsApp not linked yet' });
-  if (!validApiKey || k !== validApiKey) return res.status(403).json({ success: false, error: 'Invalid API key' });
+  if (!k || !apiKeys.includes(k)) return res.status(403).json({ success: false, error: 'Invalid API key' });
   if (!n || !m) return res.status(400).json({ success: false, error: 'Number and message required' });
   try {
-    await client.sendMessage(`${String(n).replace(/\D/g, '')}@c.us`, m);
+    const number = String(n).trim();
+    const clean = number.startsWith('+') ? `+${number.slice(1).replace(/\D/g, '')}` : number.replace(/\D/g, '');
+    const waId = `${clean.replace(/^\+/, '')}@c.us`;
+    await client.sendMessage(waId, m);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Send failed' });
@@ -210,7 +251,7 @@ app.post('/api/send', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, linked: isReady, hasApiKey: Boolean(validApiKey) });
+  res.json({ ok: true, linked: isReady, apiKeys: apiKeys.length });
 });
 
 const PORT = process.env.PORT || 8080;
