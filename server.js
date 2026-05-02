@@ -130,7 +130,8 @@ async function getStorageInfo() {
 }
 
 // --- BEAUTIFULLY DECORATED UI TEMPLATE ---
-const renderUI = (title, content, script = '') => `<!DOCTYPE html>
+// FIX: Added 'req' as the first parameter so it can check req.session.isAuth safely
+const renderUI = (req, title, content, script = '') => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -204,7 +205,7 @@ const renderUI = (title, content, script = '') => `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  ${req.session.isAuth ? `<div class="top-nav"><div class="brand">M-TECH CORE SERVER</div><a href="/logout" class="btn-logout">🔒 Sign Out Securely</a></div>` : ''}
+  ${(req && req.session && req.session.isAuth) ? `<div class="top-nav"><div class="brand">M-TECH CORE SERVER</div><a href="/logout" class="btn-logout">🔒 Sign Out Securely</a></div>` : ''}
   <main class="card">${content}</main>
   <script>${script}</script>
 </body>
@@ -214,7 +215,7 @@ const renderUI = (title, content, script = '') => `<!DOCTYPE html>
 
 app.get('/', (req, res) => {
   if (req.session.isAuth) return res.redirect('/dashboard');
-  res.send(renderUI('System Login', `
+  res.send(renderUI(req, 'System Login', `
     <div style="text-align: center; max-width: 400px; margin: 0 auto;">
         <h1 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 10px; color: white;">Server Access</h1>
         <p style="color: var(--muted); margin-bottom: 30px;">Enter the root admin key to access the WhatsApp Gateway.</p>
@@ -250,7 +251,7 @@ app.get('/dashboard', async (req, res) => {
   if (!req.session.isAuth) return res.redirect('/');
 
   if (!isReady) {
-    return res.send(renderUI('Link Device', `
+    return res.send(renderUI(req, 'Link Device', `
       <section class="head"><div class="title">Link Gateway</div><div class="status off">Awaiting Scan</div></section>
       <div class="panel" style="text-align: center; max-width: 600px; margin: 0 auto;">
         <h3>Open WhatsApp on your phone</h3>
@@ -311,7 +312,7 @@ app.get('/dashboard', async (req, res) => {
         </td>
     </tr>`).join('') : `<tr><td colspan="6" style="text-align:center; color:#64748b; padding: 30px;">No API Keys generated yet. Create one above to get started.</td></tr>`;
 
-  res.send(renderUI('Dashboard', `
+  res.send(renderUI(req, 'Dashboard', `
     <section class="head"><div class="title">Gateway Dashboard</div><div class="status on">Engine Active & Synced</div></section>
     
     <section class="panel" style="margin-bottom:25px;display:flex;align-items:center;gap:20px; background: linear-gradient(90deg, rgba(15,23,42,1) 0%, rgba(16,185,129,0.05) 100%);">
