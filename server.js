@@ -86,6 +86,7 @@ client.on('disconnected', () => {
   myProfilePic = null;
 });
 
+console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
 client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
 const renderUI = (title, content, script = '') => `<!DOCTYPE html>
