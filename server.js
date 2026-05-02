@@ -16,11 +16,11 @@ const DB_NAME = process.env.MONGO_DB_NAME || 'whatsapp_panel';
 
 const app = express();
 
-// <-- CORS ENABLED HERE (Allows all domains to access your API)
+// <-- CORS ENABLED HERE (Strictly allowing your frontend domain)
 app.use(cors({
-    origin: '*', // You can change this to 'https://mtechcalibration.in' later for extra security
-    methods: ['GET', 'POST'],
-    credentials: true
+    origin: '*', // Explicitly set to your domain
+    methods: ['GET', 'POST', 'OPTIONS'],   // Added OPTIONS for the preflight check
+    credentials: false                     // Set to false since you use an API key in the body, not cookies
 }));
 
 app.use(express.json());
