@@ -274,11 +274,9 @@ async function start() {
   console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
   client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, '0.0.0.0', () => console.log(`WhatsApp API running on ${PORT}`));
-}
+ // Use Render's PORT or default to 10000
+const PORT = process.env.PORT || 10000; 
 
-start().catch((error) => {
-  console.error('Startup failed:', error.message);
-  process.exit(1);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`>> Server is hitting the airwaves on port ${PORT}`);
 });
