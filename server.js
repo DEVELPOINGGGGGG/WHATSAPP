@@ -2,7 +2,7 @@ const { Client, RemoteAuth } = require('whatsapp-web.js');
 const { MongoStore: WWebJSMongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors'); // <-- CORS IMPORTED HERE
+const cors = require('cors');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const { MongoClient } = require('mongodb');
@@ -16,17 +16,15 @@ const DB_NAME = process.env.MONGO_DB_NAME || 'whatsapp_panel';
 
 const app = express();
 
-// <-- CORS ENABLED HERE (Strictly allowing your frontend domain)
 app.use(cors({
-    origin: '*', // Explicitly set to your domain
-    methods: ['GET', 'POST', 'OPTIONS'],   // Added OPTIONS for the preflight check
-    credentials: false                     // Set to false since you use an API key in the body, not cookies
+    origin: 'https://mtechcalibration.in', 
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: false
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// IMPORTANT: Session middleware MUST be defined before routes!
 app.use(session({
   store: MongoStore.create({ mongoUrl: MONGO_URI, dbName: DB_NAME, ttl: 60 * 60 * 24 * 14, autoRemove: 'native' }),
   secret: process.env.SESSION_SECRET || 'change-me-in-render',
@@ -41,7 +39,7 @@ let appState;
 let qrCodeImage = null;
 let isReady = false;
 let myProfilePic = null;
-let client; // We declare the client globally so your API routes can use it
+let client; 
 
 const isHeadless = process.env.HEADLESS !== 'false';
 const chromeCandidatePaths = [
@@ -53,30 +51,17 @@ const chromeCandidatePaths = [
 ].filter(Boolean);
 
 const resolvedChromePath = chromeCandidatePaths.find((p) => {
-  try {
-    return fs.existsSync(p);
-  } catch (_) {
-    return false;
-  }
+  try { return fs.existsSync(p); } catch (_) { return false; }
 });
 
 const puppeteerConfig = {
   headless: isHeadless ? 'new' : false,
   args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--disable-extensions',
-    '--disable-background-networking',
-    '--disable-background-timer-throttling',
-    '--disable-renderer-backgrounding',
-    '--disable-sync',
-    '--mute-audio',
-    '--no-zygote',
-    '--single-process',
-    '--renderer-process-limit=1',
-    '--disable-features=site-per-process,IsolateOrigins,Translate,BackForwardCache',
+    '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+    '--disable-gpu', '--disable-extensions', '--disable-background-networking',
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+    '--disable-sync', '--mute-audio', '--no-zygote', '--single-process',
+    '--renderer-process-limit=1', '--disable-features=site-per-process,IsolateOrigins,Translate,BackForwardCache',
     '--js-flags=--max-old-space-size=128'
   ]
 };
@@ -228,7 +213,6 @@ app.post('/key/delete', async (req, res) => {
   res.redirect('/dashboard');
 });
 
-// The CORS package we added at the top allows this endpoint to be called securely from your frontend!
 app.post('/api/send', async (req, res) => {
   const { k, n, m } = req.body;
   if (!isReady) return res.status(503).json({ success: false, error: 'WhatsApp not linked yet' });
@@ -246,37 +230,29 @@ app.post('/api/send', async (req, res) => {
   }
 });
 
-app.get('/api/health', async (_req, res) => {
-  const keys = await getApiKeys();
-  res.json({ ok: true, linked: isReady, apiKeys: keys.length, storage: 'mongodb' });
-});
-
 async function start() {
-  // 1. Connect MongoDB for the dashboard rules and session state
   mongoClient = new MongoClient(MONGO_URI, { maxPoolSize: 3, minPoolSize: 0, maxIdleTimeMS: 10000 });
   await mongoClient.connect();
   db = mongoClient.db(DB_NAME);
   appState = db.collection('app_state');
 
-  // 2. Connect Mongoose directly to the same database for RemoteAuth
   await mongoose.connect(MONGO_URI, { dbName: DB_NAME });
+  console.log('>> Mongoose connected successfully');
   const store = new WWebJSMongoStore({ mongoose: mongoose });
 
-  console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
-
-  // 3. Setup Client using MongoDB to save tokens
+  // UPDATED: Added clientId and reduced backupSyncIntervalMs
   client = new Client({
     authStrategy: new RemoteAuth({
+      clientId: 'mtech-main',
       store: store,
-      backupSyncIntervalMs: 300000 // Saves to database every 5 minutes
+      backupSyncIntervalMs: 60000 // Saves every 60 seconds
     }),
     puppeteer: puppeteerConfig
   });
 
-  // 4. Client Listeners
   client.on('qr', async (qr) => {
     qrCodeImage = await qrcode.toDataURL(qr);
-    console.log('>> NEW QR GENERATED');
+    console.log('>> NEW QR GENERATED. Please scan it!');
   });
 
   client.on('ready', async () => {
@@ -289,11 +265,15 @@ async function start() {
     } catch (_) {
       myProfilePic = null;
     }
-    console.log('>> WHATSAPP LINKED & SAVED TO MONGODB');
+    console.log('>> WHATSAPP LINKED! Zipping session and sending to MongoDB... (DO NOT RESTART YET)');
   });
 
+  // VERY IMPORTANT LOG
   client.on('remote_session_saved', () => {
-    console.log('>> WhatsApp Authentication Token Synced with DB');
+    console.log('\n======================================================');
+    console.log('>> ✅ SUCCESS: Authentication Token Synced with MongoDB!');
+    console.log('>> It is now safe to restart the server.');
+    console.log('======================================================\n');
   });
 
   client.on('disconnected', () => {
@@ -301,12 +281,9 @@ async function start() {
     myProfilePic = null;
   });
 
-  // Start the engine
   client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
-  // Use Render's PORT or default to 10000
   const PORT = process.env.PORT || 10000; 
-
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`>> Server is hitting the airwaves on port ${PORT}`);
   });
