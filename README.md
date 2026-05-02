@@ -10,7 +10,7 @@ A simple WhatsApp dashboard where you:
 
 ```bash
 npm install
-node server.js
+npm run start:lowmem
 ```
 
 Open `http://localhost:8080`.
@@ -34,6 +34,17 @@ Default admin password: `7992410411` (override with `ADMIN_PASSWORD`).
    - `ADMIN_PASSWORD` = your secure password
    - `SESSION_SECRET` = long random string
    - `PUPPETEER_EXECUTABLE_PATH` = `/usr/bin/chromium-browser`
+
+
+## Low-memory deployment (Render / Railway)
+
+If your instance crashes around the 512MB limit, use these env vars:
+
+- `HEADLESS=true`
+- `NODE_OPTIONS=--max-old-space-size=192`
+- `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser` (or `/usr/bin/chromium`)
+
+This project now launches Chromium with reduced-process flags to keep total memory usage lower.
 
 ## API
 

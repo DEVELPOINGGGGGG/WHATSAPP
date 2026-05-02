@@ -52,7 +52,13 @@ const puppeteerConfig = {
     '--disable-background-networking',
     '--disable-background-timer-throttling',
     '--disable-renderer-backgrounding',
-    '--js-flags=--max-old-space-size=256'
+    '--disable-sync',
+    '--mute-audio',
+    '--no-zygote',
+    '--single-process',
+    '--renderer-process-limit=1',
+    '--disable-features=site-per-process,IsolateOrigins,Translate,BackForwardCache',
+    '--js-flags=--max-old-space-size=128'
   ]
 };
 if (resolvedChromePath) puppeteerConfig.executablePath = resolvedChromePath;
