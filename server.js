@@ -5,7 +5,7 @@ const FileStore = require('session-file-store')(session);
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const path = require('path');
-const os = require('os');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json());
@@ -29,8 +29,17 @@ const chromeCandidatePaths = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
   '/usr/bin/chromium-browser',
   '/usr/bin/chromium',
-  '/usr/bin/google-chrome'
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable'
 ].filter(Boolean);
+
+const resolvedChromePath = chromeCandidatePaths.find((p) => {
+  try {
+    return fs.existsSync(p);
+  } catch (_) {
+    return false;
+  }
+});
 
 const puppeteerConfig = {
   headless: isHeadless ? 'new' : false,
@@ -46,15 +55,11 @@ const puppeteerConfig = {
     '--js-flags=--max-old-space-size=256'
   ]
 };
-if (chromeCandidatePaths.length) puppeteerConfig.executablePath = chromeCandidatePaths[0];
+if (resolvedChromePath) puppeteerConfig.executablePath = resolvedChromePath;
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, 'm_tech_auth') }),
-  puppeteer: {
-    headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process']
-  }
+  puppeteer: puppeteerConfig
 });
 
 client.on('qr', async (qr) => {
