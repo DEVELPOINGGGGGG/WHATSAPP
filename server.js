@@ -14,25 +14,10 @@ const DB_NAME = process.env.MONGO_DB_NAME || 'whatsapp_panel';
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-let sessionStore;
-try {
-  sessionStore = MongoStore.create({ mongoUrl: MONGO_URI, dbName: DB_NAME, ttl: 60 * 60 * 24 * 14, autoRemove: 'native' });
-} catch (_) {
-  sessionStore = undefined;
-}
-app.use(session({
-  store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'change-me-in-render',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 86400000 }
-}));
 
 let mongoClient;
 let db;
 let appState;
-let mongoReady = false;
-let fallbackApiKeys = [];
 let qrCodeImage = null;
 let isReady = false;
 let myProfilePic = null;
@@ -82,16 +67,12 @@ const client = new Client({
 });
 
 async function getApiKeys() {
-  if (!mongoReady || !appState) return fallbackApiKeys;
   const state = await appState.findOne({ _id: 'main' }, { projection: { apiKeys: 1 } });
   return state?.apiKeys || [];
 }
 
 async function setApiKeys(keys) {
-  const nextKeys = keys.slice(0, 20);
-  fallbackApiKeys = nextKeys;
-  if (!mongoReady || !appState) return;
-  await appState.updateOne({ _id: 'main' }, { $set: { apiKeys: nextKeys } }, { upsert: true });
+  await appState.updateOne({ _id: 'main' }, { $set: { apiKeys: keys.slice(0, 20) } }, { upsert: true });
 }
 
 async function createApiKey() {
@@ -117,7 +98,6 @@ async function getStorageInfo() {
 
   let mongoDiskMB = null;
   try {
-    if (!mongoReady || !db) throw new Error('mongo unavailable');
     const stats = await db.command({ dbStats: 1 });
     mongoDiskMB = Math.round((stats.storageSize || 0) / 1024 / 1024);
   } catch (_) {
@@ -274,33 +254,31 @@ app.post('/api/send', async (req, res) => {
 
 app.get('/api/health', async (_req, res) => {
   const keys = await getApiKeys();
-  res.json({ ok: true, linked: isReady, apiKeys: keys.length, storage: mongoReady ? 'mongodb' : 'memory', mongoReady });
+  res.json({ ok: true, linked: isReady, apiKeys: keys.length, storage: 'mongodb' });
 });
 
 async function start() {
-  try {
-    mongoClient = new MongoClient(MONGO_URI, { maxPoolSize: 3, minPoolSize: 0, maxIdleTimeMS: 10000, serverSelectionTimeoutMS: 5000 });
-    await mongoClient.connect();
-    db = mongoClient.db(DB_NAME);
-    appState = db.collection('app_state');
-    mongoReady = true;
-    fallbackApiKeys = await getApiKeys();
-    console.log('>> MongoDB connected');
-  } catch (error) {
-    mongoReady = false;
-    console.error('>> MongoDB unavailable, using memory fallback:', error.message);
-  }
+  mongoClient = new MongoClient(MONGO_URI, { maxPoolSize: 3, minPoolSize: 0, maxIdleTimeMS: 10000 });
+  await mongoClient.connect();
+  db = mongoClient.db(DB_NAME);
+  appState = db.collection('app_state');
+
+  app.use(session({
+    store: MongoStore.create({ mongoUrl: MONGO_URI, dbName: DB_NAME, ttl: 60 * 60 * 24 * 14, autoRemove: 'native' }),
+    secret: process.env.SESSION_SECRET || 'change-me-in-render',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 86400000 }
+  }));
 
   console.log('>> CHROME PATH:', puppeteerConfig.executablePath || 'auto');
   client.initialize().catch((err) => console.error('>> ENGINE FAILED:', err.message));
 
-  const requestedPort = Number(process.env.PORT) || 0;
-  const server = app.listen(requestedPort, '0.0.0.0', () => {
-    const boundPort = server.address()?.port;
-    console.log(`WhatsApp API running on ${boundPort}`);
-  });
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, '0.0.0.0', () => console.log(`WhatsApp API running on ${PORT}`));
 }
 
 start().catch((error) => {
   console.error('Startup failed:', error.message);
+  process.exit(1);
 });
