@@ -38,8 +38,13 @@ Default admin password: `7992410411` (override with `ADMIN_PASSWORD`).
 
 ## Low-memory deployment (Render / Railway)
 
+Use MongoDB so sessions/API keys survive restarts.
+
+
 If your instance crashes around the 512MB limit, use these env vars:
 
+- `MONGO_URI=<your mongodb connection string>`
+- `MONGO_DB_NAME=whatsapp_panel`
 - `HEADLESS=true`
 - `NODE_OPTIONS=--max-old-space-size=192`
 - `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser` (or `/usr/bin/chromium`)
